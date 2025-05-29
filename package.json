@@ -1,11 +1,22 @@
 {
   "name": "deploy-sftp",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "This package is an automated deployment script for Vue.js projects. It enables deployments to development and production environments using Git and SFTP.",
   "main": "index.js",
+  "bin": {
+    "deploy-sftp": "index.js"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "deploy": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "^10.0.0",
+    "ssh2-sftp-client": "^9.0.0",
+    "yargs": "^17.0.0",
+    "inquirer": "^8.0.0",
+    "ora": "^6.0.0"
   },
   "author": "Marcos Paulo <marcostrab@hotmail.com> (https://marcospaulo.dev)",
-  "license": "ISC"
+  "license": "Unlicense"
 }

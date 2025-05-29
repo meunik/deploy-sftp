@@ -22,9 +22,6 @@ if (args.includes('-h') || args.includes('--help')) {
   process.exit(0)
 }
 
-const mode = args.includes('-sftp') || args.includes('--sftp') ? 'sftp'
-  : args.includes('-git') || args.includes('--git')  ? 'git' : 'full'
-
 /**
  * Script de deploy para projetos Vue.js
  * 
@@ -40,7 +37,7 @@ const mode = args.includes('-sftp') || args.includes('--sftp') ? 'sftp'
  *  - Git flow: clone em temp, selecionar tag, commit, tag, push
  *  - Upload via SFTP inspirado em deploy.sh, seleção de ambiente mantém variáveis .env
  */
-(async function init() {
+(async function () {
   const fs = require('fs')
   const os = require('os')
   const path = require('path')
@@ -110,8 +107,7 @@ const mode = args.includes('-sftp') || args.includes('--sftp') ? 'sftp'
     ssh: new SSHClient(),
     exec,
     execSync,
-    inquirer,
-    mode
+    inquirer
   });
 })();
 
@@ -125,7 +121,6 @@ class Service {
   #execSync;
   #inquirer;
   #projectRoot;
-  #mode;
 
   #REPO_URL;
   #DIST_FOLDER;
@@ -155,7 +150,6 @@ class Service {
     exec,
     execSync,
     inquirer,
-    mode,
   }) {
     this.#fs = fs;
     this.#os = os;
@@ -166,7 +160,6 @@ class Service {
     this.#execSync = execSync;
     this.#inquirer = inquirer;
     this.#projectRoot = projectRoot;
-    this.#mode = mode;
 
     /////////////////////////////////////
 
@@ -365,6 +358,11 @@ class Service {
   }
   
   async main() {
+    const args = process.argv.slice(2)
+    const mode = (args.includes('-sftp') || args.includes('--sftp')) 
+      ? 'sftp'
+      : (args.includes('-git') || args.includes('--git'))  ? 'git' : 'full';
+
     await this.withSpinner(
       `📥 ${this.#BLUE}●${this.#NC} Buildando o projeto`, 
       () => this.run('yarn build', { cwd: this.#projectRoot })
@@ -375,8 +373,8 @@ class Service {
 
     for (const t of targets) {
       this.log(`\n${this.#LIGHT_BLUE}→ AMBIENTE: ${this.#YELLOW}${t.toUpperCase()}${this.#NC}`, false, false, false);
-      if (this.#mode !== 'sftp') await this.gitFlow(t);
-      if (this.#mode !== 'git') await this.sftpUpload(t);
+      if (mode !== 'sftp') await this.gitFlow(t);
+      if (mode !== 'git') await this.sftpUpload(t);
     }
 
     this.log(`\n${this.#LIGHT_GREEN}●●●●●●●●●● Deploy finalizado! ●●●●●●●●●●${this.#NC}`, false, false, false);

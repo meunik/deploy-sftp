@@ -2,7 +2,7 @@
 /**
  * Script de deploy para projetos Vue.js
  * 
- * Instalar Dependencias: yarn add dotenv ssh2-sftp-client yargs inquirer ora --dev
+ * Instalar Dependencias: yarn add dotenv ssh2-sftp-client inquirer ora --dev
  * Adicionar `"deploy": "node deploy.js"` ao package.json na seção de "scripts"
  * 
  * Comandos:
@@ -22,8 +22,7 @@
   const Client = require('ssh2-sftp-client')
   const { Client: SSHClient } = require('ssh2')
   const inquirer = require('inquirer')
-  const yargs = require('yargs')
-  const ora = require('ora')
+  const { default: ora } = await import('ora')
   const dotenv = require('dotenv')
 
   dotenv.config();
@@ -31,12 +30,11 @@
   try {
     require.resolve('dotenv');
     require.resolve('ssh2-sftp-client');
-    require.resolve('yargs');
     require.resolve('inquirer');
     require.resolve('ora');
   } catch (err) {
     console.error('Erro: Certifique-se de que as dependências necessárias estão instaladas.');
-    console.error('Execute: yarn add dotenv ssh2-sftp-client yargs inquirer ora --dev');
+    console.error('Execute: yarn add dotenv ssh2-sftp-client inquirer ora --dev');
     process.exit(1);
   }
 
@@ -105,7 +103,7 @@ class Service {
   #GIT_NAME;
   #CLONE_URL;
   #CONFIG;
-  
+
   #RED;
   #GREEN;
   #LIGHT_GREEN;

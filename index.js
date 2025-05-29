@@ -22,7 +22,8 @@ if (args.includes('-h') || args.includes('--help')) {
   process.exit(0)
 }
 
-const mode = args.includes('-sftp') ? 'sftp' : args.includes('-git') ? 'git' : 'full'
+const mode = args.includes('-sftp') || args.includes('--sftp') ? 'sftp'
+  : args.includes('-git') || args.includes('--git')  ? 'git' : 'full'
 
 /**
  * Script de deploy para projetos Vue.js
@@ -39,7 +40,7 @@ const mode = args.includes('-sftp') ? 'sftp' : args.includes('-git') ? 'git' : '
  *  - Git flow: clone em temp, selecionar tag, commit, tag, push
  *  - Upload via SFTP inspirado em deploy.sh, seleção de ambiente mantém variáveis .env
  */
-(async function () {
+(async function init() {
   const fs = require('fs')
   const os = require('os')
   const path = require('path')
@@ -112,7 +113,7 @@ const mode = args.includes('-sftp') ? 'sftp' : args.includes('-git') ? 'git' : '
     inquirer,
     mode
   });
-})();
+})(mode);
 
 class Service {
   #fs;

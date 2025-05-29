@@ -299,7 +299,7 @@ class Service {
         const lockFile = this.#path.join(tmp, '.git', 'index.lock');
         if (this.#fs.existsSync(lockFile)) this.#fs.unlinkSync(lockFile);
         await this.run('git add .', { cwd: tmp });
-        await this.run(`git commit -m "Atualizando para a versão ${tag}"`, { cwd: tmp });
+        await this.run(`git commit --allow-empty -m "Atualizando para a versão ${tag}"`, { cwd: tmp });
         await this.run(`git tag ${tag}`, { cwd: tmp });
       });
 

@@ -1,24 +1,30 @@
 /**
  * Script de deploy para projetos Vue.js
  * 
- * Instalar Dependencias: yarn add dotenv ssh2-sftp-client yargs --dev
+ * Instalar Dependencias: yarn add dotenv ssh2-sftp-client yargs inquirer ora --dev
  * Adicionar `"deploy": "node deploy.js"` ao package.json na seção de "scripts"
  * 
  * Comandos:
- * - yarn deploy --dev: Faz deploy para o ambiente de desenvolvimento
- * - yarn deploy --prod: Faz deploy para o ambiente de produção
- * - yarn deploy: Faz deploy para os ambientes de desenvolvimento e produção
+ *  - yarn deploy
  *
+ * Script unificado de deploy:
+ *  - Seleção de ambiente (todos/dev/prod) via menu (inquirer)
+ *  - Build do projeto (yarn build)
+ *  - Git flow: clone em temp, selecionar tag, commit, tag, push
+ *  - Upload via SFTP inspirado em deploy.sh, seleção de ambiente mantém variáveis .env
  */
 (async function () {
   const isESM = typeof import.meta !== 'undefined';
 
   const fs = isESM ? (await import('fs')).default : require('fs');
+  const os = isESM ? (await import('os')).default : require('os');
+  const ora = isESM ? (await import('ora')).default : require('ora');
   const path = isESM ? (await import('path')).default : require('path');
+  const { exec } = isESM ? (await import('child_process')).default : require('child_process');
   const { execSync } = isESM ? (await import('child_process')).default : require('child_process');
   const Client = isESM ? (await import('ssh2-sftp-client')).default : require('ssh2-sftp-client');
   const { Client: SSHClient } = isESM ? (await import('ssh2')).default : require('ssh2');
-  const readline = isESM ? (await import('readline')).default : require('readline');
+  const inquirer = isESM ? (await import('inquirer')).default : require('inquirer');
   const yargs = isESM ? (await import('yargs')).default : require('yargs');
   const dotenv = isESM ? (await import('dotenv')).default : require('dotenv');
   const { fileURLToPath } = isESM ? (await import('url')).default : require('url');
@@ -33,9 +39,11 @@
     require.resolve('dotenv');
     require.resolve('ssh2-sftp-client');
     require.resolve('yargs');
+    require.resolve('inquirer');
+    require.resolve('ora');
   } catch (err) {
     console.error('Erro: Certifique-se de que as dependências necessárias estão instaladas.');
-    console.error('Execute: yarn add dotenv ssh2-sftp-client yargs --dev');
+    console.error('Execute: yarn add dotenv ssh2-sftp-client yargs inquirer ora --dev');
     process.exit(1);
   }
 
@@ -70,263 +78,279 @@
     process.exit(1);
   }
 
-  const argv = yargs(process.argv.slice(2)).argv;
-
   new Service({
     fs,
+    os,
+    ora,
     path,
     __dirname,
-    argv,
     sftp: new Client(),
     ssh: new SSHClient(),
+    exec,
     execSync,
-    readline,
+    inquirer,
   });
 })();
 
 class Service {
   #fs;
+  #os;
+  #ora;
   #path;
-  #argv;
   #sftp;
+  #exec;
   #execSync;
-  #readline;
-  #GIT_BRANCH_DEV;
-  #GIT_BRANCH_PROD;
-  #DIST_FOLDER;
+  #inquirer;
+
   #REPO_URL;
+  #DIST_FOLDER;
   #LOCAL_DIR;
-  #CONFIG_DEV;
-  #CONFIG_PROD;
-  #REMOTE_DEV;
-  #REMOTE_PROD;
-  #IGNORE_DIR;
+  #GIT_EMAIL;
+  #GIT_NAME;
+  #CLONE_URL;
+  #CONFIG;
+  #RED;
+  #GREEN;
+  #LIGHT_GREEN;
+  #YELLOW;
+  #BLUE;
+  #LIGHT_BLUE;
+  #GRAY;
+  #WHITE;
+  #NC;
 
   constructor({
     fs,
+    os,
+    ora,
     path,
     __dirname,
-    argv,
     sftp,
+    exec,
     execSync,
-    readline,
+    inquirer,
   }) {
     this.#fs = fs;
+    this.#os = os;
+    this.#ora = ora;
     this.#path = path;
-    this.#argv = argv;
     this.#sftp = sftp;
+    this.#exec = exec;
     this.#execSync = execSync;
-    this.#readline = readline;
+    this.#inquirer = inquirer;
 
-    this.#GIT_BRANCH_DEV = process.env.GIT_BRANCH_DEV || 'dev';
-    this.#GIT_BRANCH_PROD = process.env.GIT_BRANCH_PROD || 'prod';
-    this.#DIST_FOLDER = process.env.VITE_BUILD_FOLDER;
+    /////////////////////////////////////
+
     this.#REPO_URL = process.env.VITE_REPO_URL;
+    this.#DIST_FOLDER = process.env.VITE_BUILD_FOLDER;
+    this.#LOCAL_DIR = this.#path.join(__dirname, this.#DIST_FOLDER);
+    this.#GIT_EMAIL = process.env.VITE_GIT_EMAIL;
+    this.#GIT_NAME = process.env.VITE_GIT_USER;
 
-    this.#LOCAL_DIR = path.join(__dirname, this.#DIST_FOLDER);
+    this.#CLONE_URL = this.#REPO_URL.match(/^https?:\/\/bitbucket\.org\//)
+      ? this.#REPO_URL.replace(/^https?:\/\/bitbucket\.org\//, 'git@bitbucket.org:')
+      : this.#REPO_URL;
 
-    this.#CONFIG_DEV = {
-        host: process.env.VITE_FTP_HOST_DEV,
-        port: process.env.VITE_FTP_PORT_DEV || 22,
-        username: process.env.VITE_FTP_USER_DEV,
-        password: process.env.VITE_FTP_PASS_DEV
-    };
-
-    this.#CONFIG_PROD = {
-        host: process.env.VITE_FTP_HOST_PROD,
-        port: process.env.VITE_FTP_PORT_PROD || 22,
-        username: process.env.VITE_FTP_USER_PROD,
-        password: process.env.VITE_FTP_PASS_PROD,
-    };
-
-    this.#REMOTE_DEV = process.env.VITE_FTP_DIRR_DEV;
-    this.#REMOTE_PROD = process.env.VITE_FTP_DIRR_PROD;
-
-    // Lista de diretórios a serem ignorados
-    this.#IGNORE_DIR = process.env.IGNORE_DIR || ['1BKP', 'serve', 'server', 'painel', '.git'];
-
-    this.#main()
-  }
-
-  async #msg(tipo, mensagem = '', erro = null) {
-    switch (tipo) {
-      case 'info': console.log(`\x1b[94m●\x1b[0m \x1b[34m${mensagem}\x1b[0m`); break;
-      case 'title': console.log(`\x1b[94m●\x1b[0m \x1b[34m${mensagem}\x1b[0m\x1b[90m...\x1b[0m`); break;
-      case 'sucesso': console.log(`\x1b[92m✓\x1b[0m \x1b[32m${mensagem}\x1b[0m`); break;
-      case 'erro': console.error(`\x1b[91m✗\x1b[0m \x1b[31m${mensagem}\x1b[0m: `, erro); break;
-      case 'loading': console.log('\x1b[90m    ...\x1b[0m'); break;
-      case 'loading2': process.stdout.write(`\x1b[90m●\x1b[0m `); break;
-    }
-  }
-  
-  async #execCommand(comando, errorMsg, options = {}) {
-    return new Promise((resolve, reject) => {
-      try {
-        this.#execSync(comando, { stdio: 'inherit', ...options });
-        resolve();
-      } catch (error) {
-        this.#msg('erro', errorMsg, error);
-        process.exit(1);
+    this.#CONFIG = {
+      dev: {
+        branch: 'dev',
+        sftp: {
+          host: process.env.VITE_FTP_HOST_DEV,
+          port: process.env.VITE_FTP_PORT_DEV || 22,
+          username: process.env.VITE_FTP_USER_DEV,
+          password: process.env.VITE_FTP_PASS_DEV,
+        },
+        remoteDir: process.env.VITE_FTP_DIRR_DEV
+      },
+      prod: {
+        branch: 'prod',
+        sftp: {
+          host: process.env.VITE_FTP_HOST_PROD,
+          port: process.env.VITE_FTP_PORT_PROD || 22,
+          username: process.env.VITE_FTP_USER_PROD,
+          password: process.env.VITE_FTP_PASS_PROD,
+        },
+        remoteDir: process.env.VITE_FTP_DIRR_PROD
       }
+    };
+
+    this.#RED = '\x1b[0;31m';
+    this.#GREEN = '\x1b[0;32m';
+    this.#LIGHT_GREEN = '\x1b[1;32m';
+    this.#YELLOW = '\x1b[0;33m';
+    this.#BLUE = '\x1b[0;34m';
+    this.#LIGHT_BLUE = '\x1b[1;36m';
+    this.#GRAY = '\x1b[0;90m';
+    this.#WHITE = '\x1b[1;37m';
+    this.#NC = '\x1b[0m';
+
+    this.main()
+  }
+
+  log(msg, icone = '●', color = this.#BLUE, dotsColor = this.#GRAY) {
+    const dots = dotsColor ? `${dotsColor}...${this.#NC}` : '';
+    const point = color ? `${color}●${this.#NC} ` : '';
+    const icon = icone ? `${icone} ` : '';
+    console.log(`${point}${icon}${point}${msg}${dots}`);
+  }
+  logDot() {
+    process.stdout.write(`${this.#LIGHT_GREEN}●${this.#NC}`);
+  }
+
+  run(cmd, opts = {}) {
+    return new Promise((resolve, reject) => {
+      this.#exec(cmd, { shell: true, ...opts, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+        if (err) {
+          console.error(stdout, stderr);
+          return reject(err);
+        }
+        resolve(stdout);
+      });
     });
   }
-  
-  async #versao(branch, distOptions) {
+
+  async withSpinner(title, fn) {
+    const spinner = this.#ora({ text: title, color: 'cyan' }).start();
     try {
-      this.#execSync(`git rev-parse --verify ${branch}`, { stdio: 'inherit', ...distOptions });
-      await this.#execCommand(`git checkout ${branch}`, `Erro ao entrar a branch ${branch}`, distOptions);
-      const lastCommitBuffer = this.#execSync(`git log -1 --pretty=%B`, { stdio: 'pipe', ...distOptions });
-      const lastCommit = lastCommitBuffer ? lastCommitBuffer.toString().trim() : '';
-      let [primeiro, segundo] = lastCommit.split('.').map(Number);
-      if (isNaN(primeiro) || isNaN(segundo)) {
-        primeiro = 1;
-        segundo = 1;
-      } else {
-        segundo += 1;
-      }
-      const defaultCommit = `${primeiro}.${segundo}`;
-      const rl = this.#readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-      });
-  
-      async function askVersion() {
-        return new Promise((resolve) => {
-          rl.question(`Qual será a versão? (Padrão: n.n) (Recomendado: ${defaultCommit}): `, async (input) => {
-            const versionPattern = /^\d+\.\d+$/;
-            if (versionPattern.test(input) || input === '') {
-              const commitMessage = input || defaultCommit;
-              rl.close();
-              resolve(commitMessage);
-            } else {
-              this.#msg('erro', 'Formato inválido. Por favor, insira um valor no formato padrão n.n');
-              await askVersion();
-              resolve();
-            }
-          });
+      const result = fn();
+      if (result instanceof Promise) await result;
+      spinner.succeed(`${title}`);
+      return result;
+    } catch (e) {
+      spinner.fail(`${title}`);
+      throw e;
+    }
+  }
+
+  async selectEnv() {
+    const { env } = await this.#inquirer.prompt([{
+      type: 'list',
+      name: 'env',
+      message: 'Selecione o ambiente para deploy:',
+      choices: ['todos', 'dev', 'prod']
+    }]);
+    return env;
+  }
+
+  async selectTag(tmpDir) {
+    this.log(`Buscando tags do repositório`, '🔍', this.#BLUE);
+    this.run(`git remote set-url origin ${this.#CLONE_URL}`, { cwd: tmpDir });
+    this.run('git fetch --tags', { cwd: tmpDir });
+    
+    const tags = this.#execSync('git tag', { cwd: tmpDir }).toString().trim().split(/\r?\n/).filter(Boolean);
+    const lastFive = tags.slice(-5);
+    let defaultTag = '1.0';
+    if (tags.length) {
+      const [m, s] = tags[tags.length - 1].split('.').map(n => parseInt(n, 10));
+      defaultTag = `${m}.${isNaN(s) ? 1 : s + 1}`;
+    }
+    
+    const choices = [...lastFive, 'nova-tag-personalizada', defaultTag, new this.#inquirer.Separator(), 'cancelar'].reverse();
+
+    const { tag } = await this.#inquirer.prompt([{
+      type: 'list',
+      name: 'tag',
+      message: '●●●● Selecione a tag:',
+      choices
+    }]);
+    if (tag === 'cancelar') process.exit(0);
+    if (tag === 'nova-tag-personalizada') {
+      const { custom } = await this.#inquirer.prompt([{
+        type: 'input',
+        name: 'custom',
+        message: `Digite a nova tag (formato n.n), recomendada ${defaultTag}:`,
+        validate: i => /^\d+\.\d+$/.test(i) ? true : 'Formato inválido'
+      }]);
+      return custom;
+    }
+    return tag;
+  }
+
+  async gitFlow(envKey) {
+    const { branch } = this.#CONFIG[envKey];
+    const tmp = this.#fs.mkdtempSync(this.#path.join(this.#os.tmpdir(), `deploy-${branch}-`));
+    try {
+      await this.withSpinner(`📥 ${this.#BLUE}●${this.#NC} Clonando branch ${this.#YELLOW}${branch}${this.#NC}`, () => 
+        this.run(`git clone --branch ${branch} ${this.#CLONE_URL} ${tmp}`)
+      );
+
+      await this.withSpinner(`🧹 ${this.#YELLOW}●${this.#NC} Removendo arquivos exceto .git`, () => {
+        this.#fs.readdirSync(tmp).forEach(item => {
+          if (item !== '.git') this.#fs.rmSync(this.#path.join(tmp, item), { recursive: true, force: true });
         });
-      }
-  
-      const commitMessage = await askVersion();
-      return commitMessage;
-    } catch (error) {
-      console.log(error);
-      this.#msg('title', `Branch criada: ${branch}`);
-      await this.#execCommand(`git checkout -b ${branch}`, `Erro ao criar a branch ${branch}`, distOptions);
-      return '1.1'
-    }
-  }
-  
-  async #reset(branch, distOptions) {
-    try {
-      this.#execSync(`git rev-parse --verify ${branch}`, { stdio: 'inherit', ...distOptions });
-      await this.#execCommand(`git reset --hard origin/${branch}`, 'Erro:', distOptions);
-      await this.#execCommand(`git clean -fd`, 'Erro:', distOptions);
-      return true;
-    } catch (error) {
-      return false;
-    }
-  }
-  
-  async #deployToBranch(branch) {
-    const distOptions = { cwd: this.#DIST_FOLDER };
-    let currentBranch = null;
-  
-    try {
-      currentBranch = this.#execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
-      this.#msg('title', `Branch atual: ${currentBranch}`);
-    } catch (error) {
-      this.#msg('erro', 'Nenhuma branch encontrada', error);
-    }
-  
-    // Verifica se a pasta dist existe, se não, cria
-    if (!this.#fs.existsSync(this.#DIST_FOLDER)) {
-      this.#msg('title', `Criando a pasta ${this.#DIST_FOLDER}`);
-      this.#fs.mkdirSync(this.#DIST_FOLDER, { recursive: true });
-    }
-  
-    await this.#execCommand('git init', 'Erro ao iniciar o repositório Git', distOptions);
-    try {
-      const remotes = this.#execSync('git remote', { ...distOptions }).toString().trim().split('\n');
-      if (!remotes.includes('origin')) {
-        this.#msg('title', `Adicionando o repositório remoto`);
-        await this.#execCommand(
-          `git remote add origin ${this.#REPO_URL}`,
-          'Erro ao adicionar o repositório remoto',
-          distOptions
-        );
-      }
-    } catch (error) {
-      this.#msg('erro', 'Erro ao verificar os remotes', error);
-    }
-  
-    await this.#execCommand(`git fetch origin`, 'Erro:', distOptions);
-    await this.#reset(branch, distOptions);
-    this.#msg('title', `Mudando para branch: ${branch}`);
-    const commitMessage = await this.#versao(branch, distOptions);
-    await this.#build();
-  
-    await this.#execCommand('git add .', 'Erro ao adicionar os arquivos ao Git', distOptions);
-    await this.#execCommand(`git commit --allow-empty -m "${commitMessage}"`, 'Erro ao commitar os arquivos', distOptions);
-    this.#msg('title', `Push do commit com a versão: ${commitMessage}`);
-    await this.#execCommand(`git push -u --force origin ${branch}`, 'Erro ao fazer push para a branch', distOptions);
-    if (currentBranch && (currentBranch != branch)) await this.#execCommand(`git checkout ${currentBranch}`, `Erro ao voltar para a branch ${currentBranch}`);
-    this.#msg('title', `Voltado para a branch: ${currentBranch}`);
-  }
-  
-  /////////////////////////////////////////////////////////////////////
-  
-  async #deployToServer(config, remote, ambiente) {
-    try {
-      this.#msg('title', `Subindo os arquvios para ${ambiente} via SFTP`);
-      await this.#sftp.connect(config);
-      this.#sftp.on('upload', info => this.#msg('loading2'));
-      await this.#sftp.uploadDir(this.#LOCAL_DIR, remote, {
-        filter: (item) => {
-          const itemName = this.#path.basename(item);
-          return !this.#IGNORE_DIR.includes(itemName);
-        }
       });
-      this.#msg('sucesso', `Upload para ${ambiente} finalizado sucesso!`);
-    } catch (err) {
-      this.#msg('erro', `Erro ao subir para ${ambiente} via SFTP`, err.message);
+
+      await this.withSpinner(`📋 ${this.#BLUE}●${this.#NC} Copiando build para o diretório temporário`, () =>
+        this.#fs.cpSync(this.#LOCAL_DIR, tmp, { recursive: true })
+      );
+
+      await this.withSpinner(`🔧 ${this.#BLUE}●${this.#NC} Configurando identidade Git`, () => {
+        this.run(`git config user.email "${this.#GIT_EMAIL}"`, { cwd: tmp });
+        this.run(`git config user.name "${this.#GIT_NAME}"`, { cwd: tmp });
+      });
+
+      const tag = await this.selectTag(tmp);
+
+      await this.withSpinner(`🗑️  ${this.#YELLOW}●${this.#NC} Excluindo tag anterior ${this.#LIGHT_BLUE}${tag}${this.#NC}`, async () => {
+        try {
+          await this.run(`git rev-parse -q --verify refs/tags/${tag}`, { cwd: tmp });
+          await this.run(`git tag -d ${tag}`, { cwd: tmp });
+          await this.run(`git push origin :refs/tags/${tag}`, { cwd: tmp });
+        } catch {}
+      });
+
+      await this.withSpinner(`📝 ${this.#BLUE}●${this.#NC} Criando commit para a versão ${this.#LIGHT_BLUE}${tag}${this.#NC}`, async () => {
+        const lockFile = this.#path.join(tmp, '.git', 'index.lock');
+        if (this.#fs.existsSync(lockFile)) this.#fs.unlinkSync(lockFile);
+        await this.run('git add .', { cwd: tmp });
+        await this.run(`git commit -m "Atualizando para a versão ${tag}"`, { cwd: tmp });
+        await this.run(`git tag ${tag}`, { cwd: tmp });
+      });
+
+      await this.withSpinner(`🚀 ${this.#BLUE}●${this.#NC} Enviando branch ${this.#YELLOW}${branch}${this.#NC}`, () =>
+        this.run(`git push origin ${branch} --force`, { cwd: tmp })
+      );
+
+      await this.withSpinner(`🚀 ${this.#BLUE}●${this.#NC} Enviando tag ${this.#LIGHT_BLUE}${tag}${this.#NC}`, () =>
+        this.run(`git push origin ${tag} --force`, { cwd: tmp })
+      );
+    } finally {
+      await this.withSpinner(`🧹 ${this.#GREEN}●${this.#NC} Removendo diretório temporário`, async () => {
+        await new Promise(r => setTimeout(r, 100));
+        this.#fs.rmSync(tmp, { recursive: true, force: true });
+      });
+    }
+  }
+
+  async sftpUpload(envKey) {
+    const cfg = this.#CONFIG[envKey].sftp;
+    const remote = this.#CONFIG[envKey].remoteDir;
+    try {
+      await this.withSpinner(`🔧 ${this.#BLUE}●${this.#NC} Conectando SFTP em ${this.#YELLOW}${envKey}${this.#NC}`, () => this.#sftp.connect(cfg));
+      this.#sftp.on('upload', () => this.logDot());
+      this.log(`Upload de arquivos para ${this.#YELLOW}${envKey}${this.#NC}`, '🚀', this.#BLUE);
+      await this.#sftp.uploadDir(this.#LOCAL_DIR, remote, {
+        filter: item => !['1BKP','serve','server','painel','.git'].includes(this.#path.basename(item))
+      });
+      this.log(`\n${this.#GREEN}✔${this.#NC} ●●●● ${this.#GREEN}Upload ${this.#YELLOW}${envKey}${this.#GREEN} concluído${this.#NC}`, false, false, false);
     } finally {
       await this.#sftp.end();
     }
   }
   
-  async #dev() {
-    this.#msg('title', 'Iniciando deploy para DEV');
-    await this.#deployToBranch(this.#GIT_BRANCH_DEV);
-    await this.#deployToServer(this.#CONFIG_DEV, this.#REMOTE_DEV, this.#GIT_BRANCH_DEV);
-  }
-  async #prod() {
-    this.#msg('title', 'Iniciando deploy para PROD');
-    await this.#deployToBranch(this.#GIT_BRANCH_PROD);
-    await this.#deployToServer(this.#CONFIG_PROD, this.#REMOTE_PROD, this.#GIT_BRANCH_PROD);
-  }
-  async #build() {
-    this.#msg('title', 'Buildando o projeto');
-    await this.#execCommand('yarn build', 'Erro ao buildar o projeto');
-    this.#msg('sucesso', 'Build concluído com sucesso!');
-    this.#msg('loading');
-  }
-  
-  
-  /////////////////////////////////////////////////////////////////////
-  
-  async #main() {
-    await this.#execCommand('git --version', 'Erro ao verificar a versão do Git');
-    await this.#execCommand('git rev-parse --is-inside-work-tree', 'Git ainda não foi iniciado.');
-  
-    if (this.#argv.dev) await this.#dev();
-    else if (this.#argv.prod) await this.#prod();
-    else {
-      await this.#dev();
-      await this.#prod();
+  async main() {
+    await this.withSpinner(`📥 ${this.#BLUE}●${this.#NC} Buildando o projeto`, () => this.run('yarn build'));
+
+    const env = await this.selectEnv();
+    const targets = env === 'todos' ? ['dev', 'prod'] : [env];
+
+    for (const t of targets) {
+      this.log(`\n${this.#LIGHT_BLUE}→ AMBIENTE: ${this.#YELLOW}${t.toUpperCase()}${this.#NC}`, false, false, false);
+      await this.gitFlow(t);
+      await this.sftpUpload(t);
     }
-  
-    this.#msg('sucesso', 'Deploy Finalizado!');
+
+    this.log(`\n${this.#LIGHT_GREEN}●●●●●●●●●● Deploy finalizado! ●●●●●●●●●●${this.#NC}`, false, false, false);
   }
 }
 

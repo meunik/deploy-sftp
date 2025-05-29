@@ -25,8 +25,6 @@
   const { default: ora } = await import('ora')
   const dotenv = require('dotenv')
 
-  dotenv.config();
-
   try {
     require.resolve('dotenv');
     require.resolve('ssh2-sftp-client');
@@ -38,11 +36,15 @@
     process.exit(1);
   }
 
-  const envPath = path.join(__dirname, '.env');
+  const projectRoot = process.cwd()
+  const envPath = path.join(projectRoot, '.env')
+
   if (!fs.existsSync(envPath)) {
-    console.error(`Erro: O arquivo .env não foi encontrado no caminho: ${envPath}`);
-    process.exit(1);
+    console.error(`Erro: O arquivo .env não foi encontrado no caminho: ${envPath}`)
+    process.exit(1)
   }
+
+  dotenv.config({ path: envPath })
 
   // Variáveis de ambiente obrigatórias
   const varEnvObrigatorias = [
@@ -77,7 +79,7 @@
     os,
     ora,
     path,
-    __dirname,
+    projectRoot,
     sftp: new Client(),
     ssh: new SSHClient(),
     exec,
@@ -95,6 +97,7 @@ class Service {
   #exec;
   #execSync;
   #inquirer;
+  #projectRoot;
 
   #REPO_URL;
   #DIST_FOLDER;
@@ -119,7 +122,7 @@ class Service {
     os,
     ora,
     path,
-    __dirname,
+    projectRoot,
     sftp,
     exec,
     execSync,
@@ -133,12 +136,13 @@ class Service {
     this.#exec = exec;
     this.#execSync = execSync;
     this.#inquirer = inquirer;
+    this.#projectRoot = projectRoot;
 
     /////////////////////////////////////
 
     this.#REPO_URL = process.env.VITE_REPO_URL;
     this.#DIST_FOLDER = process.env.VITE_BUILD_FOLDER;
-    this.#LOCAL_DIR = this.#path.join(__dirname, this.#DIST_FOLDER);
+    this.#LOCAL_DIR    = this.#path.join(this.#projectRoot, this.#DIST_FOLDER);
     this.#GIT_EMAIL = process.env.VITE_GIT_EMAIL;
     this.#GIT_NAME = process.env.VITE_GIT_USER;
 
@@ -195,10 +199,7 @@ class Service {
   run(cmd, opts = {}) {
     return new Promise((resolve, reject) => {
       this.#exec(cmd, { shell: true, ...opts, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
-        if (err) {
-          console.error(stdout, stderr);
-          return reject(err);
-        }
+        if (err) return reject(stderr || err)
         resolve(stdout);
       });
     });
@@ -334,7 +335,10 @@ class Service {
   }
   
   async main() {
-    await this.withSpinner(`📥 ${this.#BLUE}●${this.#NC} Buildando o projeto`, () => this.run('yarn build'));
+    await this.withSpinner(
+      `📥 ${this.#BLUE}●${this.#NC} Buildando o projeto`, 
+      () => this.run('yarn build', { cwd: this.#projectRoot })
+    );
 
     const env = await this.selectEnv();
     const targets = env === 'todos' ? ['dev', 'prod'] : [env];

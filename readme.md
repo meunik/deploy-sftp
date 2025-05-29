@@ -17,8 +17,9 @@ Ele faz build, gerencia tags/branches e envia os arquivos para servidores de des
     - [Via npx / NPX](#via-npx--npx)
     - [Com pacote instalado globalmente](#com-pacote-instalado-globalmente)
     - [Como script no `package.json`](#como-script-no-packagejson)
+    - [🏳️ Flags disponíveis](#️-flags-disponíveis)
+    - [🛠️ Exemplos de uso](#️-exemplos-de-uso)
   - [⚙️ Fluxo de Deploy](#️-fluxo-de-deploy)
-  - [🛠️ Exemplos](#️-exemplos)
   - [📄 Licença](#-licença)
   - [😁 Feito por Marcos Paulo](#-feito-por-marcos-paulo)
 
@@ -26,11 +27,15 @@ Ele faz build, gerencia tags/branches e envia os arquivos para servidores de des
 
 ## 🔍 Recursos
 
-- Seleção de ambiente (todos / dev / prod) via menu interativo  
+- Menu interativo para escolher ambiente: `todos`, `dev` ou `prod`  
 - Build do projeto (`yarn build` ou `npm run build`)  
-- Fluxo Git: clone em diretório temporário, commit, tag e push  
+- Git flow completo: clone em pasta temporária, commit, tag, push  
 - Upload de diretórios via SFTP com feedback em tempo real  
-- Gerencia versões usando tags sem sair do terminal  
+- Suporte a flags:  
+  - `-g, --git` → apenas fluxo Git (inclui build)  
+  - `-s, --sftp` → apenas upload SFTP (inclui build)  
+  - `-v, --version` → exibe a versão instalada  
+  - `-h, --help` → exibe esta ajuda  
 
 ---
 
@@ -45,7 +50,7 @@ Ele faz build, gerencia tags/branches e envia os arquivos para servidores de des
 
 ## 📥 Instalação
 
-Instale globalmente para usar o comando `deploy-sftp` de qualquer lugar:
+Instale globalmente para usar o comando `deploy-sftp` **ou** o alias `deploy` de qualquer lugar:
 
 ```bash
 npm install -g deploy-sftp
@@ -53,7 +58,11 @@ npm install -g deploy-sftp
 yarn global add deploy-sftp
 ```
 
-Ou adicione como dependência de desenvolvimento:
+Isso cria dois comandos no seu PATH:  
+- `deploy-sftp`  
+- `deploy`
+
+Ou adicione como dependência de desenvolvimento no seu projeto:
 
 ```bash
 npm install --save-dev deploy-sftp
@@ -61,7 +70,7 @@ npm install --save-dev deploy-sftp
 yarn add --dev deploy-sftp
 ```
 
-> Todas as dependências (`dotenv`, `ssh2-sftp-client`, `yargs`, `inquirer`, `ora`) são instaladas automaticamente pelo npm/yarn.
+> Todas as dependências (`dotenv`, `ssh2-sftp-client`, `yargs`, `inquirer`, `ora`) são instaladas automaticamente.
 
 ---
 
@@ -106,12 +115,16 @@ VITE_FTP_DIRR_PROD=/var/www/prod
 
 ```bash
 npx deploy-sftp
+# ou
+npx deploy
 ```
 
 ### Com pacote instalado globalmente
 
 ```bash
 deploy-sftp
+# ou
+deploy
 ```
 
 ### Como script no `package.json`
@@ -121,7 +134,9 @@ Adicione em `"scripts"`:
 ```json
 {
   "scripts": {
-    "deploy": "deploy-sftp"
+    "deploy": "deploy-sftp",
+    // ou
+    "deploy": "deploy"
   }
 }
 ```
@@ -132,6 +147,38 @@ E então:
 npm run deploy
 # ou
 yarn deploy
+```
+
+---
+
+### 🏳️ Flags disponíveis
+
+- `-g, --git` → somente fluxo Git (build + gitFlow)  
+- `-s, --sftp` → somente upload SFTP (build + sftpUpload)  
+- `-v, --version` → exibe a versão do CLI  
+- `-h, --help` → exibe esta ajuda  
+
+### 🛠️ Exemplos de uso
+
+```bash
+# deploy completo (build + gitFlow + sftpUpload)
+deploy
+
+# apenas Git flow
+deploy -g
+# ou
+deploy --git
+
+# apenas SFTP
+deploy -s
+# ou
+deploy --sftp
+
+# ver versão
+deploy -v
+
+# ver ajuda
+deploy -h
 ```
 
 ---
@@ -147,20 +194,6 @@ yarn deploy
 7. Commit + tag + push para repositório remoto.  
 8. Realiza upload dos arquivos build via SFTP.  
 9. Remove pasta temporária e encerra.
-
----
-
-## 🛠️ Exemplos
-
-```bash
-# Deploy somente em dev
-deploy-sftp
-# Selecionar 'dev' no menu
-
-# Deploy em todos os ambientes
-deploy-sftp
-# Selecionar 'todos' no menu
-```
 
 ---
 

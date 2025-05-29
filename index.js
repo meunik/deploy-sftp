@@ -14,8 +14,8 @@ if (args.includes('-h') || args.includes('--help')) {
     Uso: deploy-sftp [opções] ou deploy [opções]
 
     Opções:
-      -git          Executa apenas o fluxo Git (inclui build)
-      -sftp         Executa apenas o upload SFTP (inclui build)
+      -g, --git     Executa apenas o fluxo Git (inclui build)
+      -s, --sftp    Executa apenas o upload SFTP (inclui build)
       -v, --version Exibe a versão
       -h, --help    Exibe esta ajuda
   `)
@@ -359,9 +359,9 @@ class Service {
   
   async main() {
     const args = process.argv.slice(2)
-    const mode = (args.includes('-sftp') || args.includes('--sftp')) 
+    const mode = (args.includes('-s') || args.includes('--sftp')) 
       ? 'sftp'
-      : (args.includes('-git') || args.includes('--git'))  ? 'git' : 'full';
+      : (args.includes('-g') || args.includes('--git'))  ? 'git' : 'full';
 
     await this.withSpinner(
       `📥 ${this.#BLUE}●${this.#NC} Buildando o projeto`, 

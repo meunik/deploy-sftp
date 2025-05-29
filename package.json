@@ -1,6 +1,6 @@
 {
   "name": "deploy-sftp",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "description": "This package is an automated deployment script for Vue.js projects. It enables deployments to development and production environments using Git and SFTP.",
   "main": "index.js",
   "bin": {

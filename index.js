@@ -1,4 +1,29 @@
 #!/usr/bin/env node
+
+const args = process.argv.slice(2)
+
+if (args.includes('-v') || args.includes('--version')) {
+  const path = require('path')
+  const pkg = require(path.join(__dirname, 'package.json'))
+  console.log(pkg.version)
+  process.exit(0)
+}
+
+if (args.includes('-h') || args.includes('--help')) {
+  console.log(`
+    Uso: deploy-sftp [opções] ou deploy [opções]
+
+    Opções:
+      -git          Executa apenas o fluxo Git (inclui build)
+      -sftp         Executa apenas o upload SFTP (inclui build)
+      -v, --version Exibe a versão
+      -h, --help    Exibe esta ajuda
+  `)
+  process.exit(0)
+}
+
+const mode = args.includes('-sftp') ? 'sftp' : args.includes('-git') ? 'git' : 'full'
+
 /**
  * Script de deploy para projetos Vue.js
  * 
@@ -85,6 +110,7 @@
     exec,
     execSync,
     inquirer,
+    mode
   });
 })();
 
@@ -98,6 +124,7 @@ class Service {
   #execSync;
   #inquirer;
   #projectRoot;
+  #mode;
 
   #REPO_URL;
   #DIST_FOLDER;
@@ -127,6 +154,7 @@ class Service {
     exec,
     execSync,
     inquirer,
+    mode,
   }) {
     this.#fs = fs;
     this.#os = os;
@@ -137,6 +165,7 @@ class Service {
     this.#execSync = execSync;
     this.#inquirer = inquirer;
     this.#projectRoot = projectRoot;
+    this.#mode = mode;
 
     /////////////////////////////////////
 
@@ -345,8 +374,8 @@ class Service {
 
     for (const t of targets) {
       this.log(`\n${this.#LIGHT_BLUE}→ AMBIENTE: ${this.#YELLOW}${t.toUpperCase()}${this.#NC}`, false, false, false);
-      await this.gitFlow(t);
-      await this.sftpUpload(t);
+      if (this.#mode !== 'sftp') await this.gitFlow(t);
+      if (this.#mode !== 'git') await this.sftpUpload(t);
     }
 
     this.log(`\n${this.#LIGHT_GREEN}●●●●●●●●●● Deploy finalizado! ●●●●●●●●●●${this.#NC}`, false, false, false);

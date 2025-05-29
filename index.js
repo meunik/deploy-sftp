@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Script de deploy para projetos Vue.js
  * 

@@ -15,26 +15,18 @@
  *  - Upload via SFTP inspirado em deploy.sh, seleção de ambiente mantém variáveis .env
  */
 (async function () {
-  const isESM = typeof import.meta !== 'undefined';
-
-  const fs = isESM ? (await import('fs')).default : require('fs');
-  const os = isESM ? (await import('os')).default : require('os');
-  const ora = isESM ? (await import('ora')).default : require('ora');
-  const path = isESM ? (await import('path')).default : require('path');
-  const { exec } = isESM ? (await import('child_process')).default : require('child_process');
-  const { execSync } = isESM ? (await import('child_process')).default : require('child_process');
-  const Client = isESM ? (await import('ssh2-sftp-client')).default : require('ssh2-sftp-client');
-  const { Client: SSHClient } = isESM ? (await import('ssh2')).default : require('ssh2');
-  const inquirer = isESM ? (await import('inquirer')).default : require('inquirer');
-  const yargs = isESM ? (await import('yargs')).default : require('yargs');
-  const dotenv = isESM ? (await import('dotenv')).default : require('dotenv');
-  const { fileURLToPath } = isESM ? (await import('url')).default : require('url');
-  const { dirname } = isESM ? (await import('path')).default : require('path');
+  const fs = require('fs')
+  const os = require('os')
+  const path = require('path')
+  const { exec, execSync } = require('child_process')
+  const Client = require('ssh2-sftp-client')
+  const { Client: SSHClient } = require('ssh2')
+  const inquirer = require('inquirer')
+  const yargs = require('yargs')
+  const ora = require('ora')
+  const dotenv = require('dotenv')
 
   dotenv.config();
-
-  const __filename = isESM ? fileURLToPath(import.meta.url) : __filename;
-  const __dirname = isESM ? dirname(__filename) : __dirname;
 
   try {
     require.resolve('dotenv');
@@ -56,8 +48,11 @@
 
   // Variáveis de ambiente obrigatórias
   const varEnvObrigatorias = [
-    'VITE_BUILD_FOLDER',
     'VITE_REPO_URL',
+    'VITE_GIT_EMAIL',
+    'VITE_GIT_USER',
+    
+    'VITE_BUILD_FOLDER',
 
     'VITE_FTP_HOST_DEV',
     'VITE_FTP_PORT_DEV',
@@ -110,6 +105,7 @@ class Service {
   #GIT_NAME;
   #CLONE_URL;
   #CONFIG;
+  
   #RED;
   #GREEN;
   #LIGHT_GREEN;

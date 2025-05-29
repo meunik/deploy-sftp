@@ -113,7 +113,7 @@ const mode = args.includes('-sftp') || args.includes('--sftp') ? 'sftp'
     inquirer,
     mode
   });
-})(mode);
+})();
 
 class Service {
   #fs;

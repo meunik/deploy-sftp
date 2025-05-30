@@ -360,7 +360,7 @@ class Service {
         this.run(`git config user.name "${this.#GIT_NAME}"`, { cwd: tmp });
       });
 
-      const tag = await this.selectTag(tmp);
+      const tagInfo = await this.selectTag(tmp, envKey);
     
       await this.withSpinner(
         `🗑️  ${this.#YELLOW}●${this.#NC} Excluindo tag anterior ${this.#LIGHT_BLUE}${tagInfo.display}${this.#NC}`, 

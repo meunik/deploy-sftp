@@ -265,7 +265,7 @@ class Service {
     }
     
     const choices = [
-      { name: `${this.#LIGHT_BLUE}${defaultTag}${this.#NC}`, value: defaultTag },
+      { name: defaultTag, value: defaultTag },
       { name: `nova-tag-personalizada`, value: 'nova-tag-personalizada' },
       { name: `${this.#RED}cancelar${this.#NC}`, value: 'cancelar' },
       new this.#inquirer.Separator(`${this.#GRAY}----- Últimas tags -----${this.#NC}`),
@@ -280,7 +280,7 @@ class Service {
       choices
     }]);
     if (tag === 'cancelar') {
-      this.log(`\n${this.#RED}✖ ${this.#NC}●●●● ${this.#RED}Deploy cancelado pelo usuário${this.#NC}`, false, false, false);
+      this.log(`${this.#RED}✖ ${this.#NC}●●●● ${this.#RED}Deploy cancelado pelo usuário${this.#NC}`, false, false, false);
       await this.removeTempDir(tmpDir);
       process.exit(0);
     }

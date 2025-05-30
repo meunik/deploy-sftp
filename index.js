@@ -251,16 +251,27 @@ class Service {
     return env;
   }
 
-  async selectTag(tmpDir) {
-    this.log(`Buscando tags do repositório`, '🔍', this.#BLUE);
+  async selectTag(tmpDir, envKey) {
+    this.log(`Buscando tags do repositório para ${this.#YELLOW}${envKey}${this.#NC}`, '🔍', this.#BLUE);
     this.run(`git remote set-url origin ${this.#CLONE_URL}`, { cwd: tmpDir });
     this.run('git fetch --tags', { cwd: tmpDir });
     
-    const tags = this.#execSync('git tag', { cwd: tmpDir }).toString().trim().split(/\r?\n/).filter(Boolean);
-    const lastFive = tags.slice(-5);
+    const allTags = this.#execSync('git tag', { cwd: tmpDir }).toString().trim().split(/\r?\n/).filter(Boolean);
+    
+    const envSuffix = `.${envKey}`;
+    const envTags = allTags
+      .filter(tag => tag.endsWith(envSuffix))
+      .map(tag => ({
+        display: tag.replace(envSuffix, ''), // Formato de exibição n.n
+        full: tag // Formato completo n.n.dev/prod
+      }));
+    
+    const lastFive = envTags.slice(-5);
+    
     let defaultTag = '1.0';
-    if (tags.length) {
-      const [m, s] = tags[tags.length - 1].split('.').map(n => parseInt(n, 10));
+    if (envTags.length) {
+      const lastTag = envTags[envTags.length - 1].display;
+      const [m, s] = lastTag.split('.').map(n => parseInt(n, 10));
       defaultTag = `${m}.${isNaN(s) ? 1 : s + 1}`;
     }
     
@@ -269,21 +280,26 @@ class Service {
       { name: `nova-tag-personalizada`, value: 'nova-tag-personalizada' },
       { name: `${this.#RED}cancelar${this.#NC}`, value: 'cancelar' },
       new this.#inquirer.Separator(`${this.#GRAY}----- Últimas tags -----${this.#NC}`),
-      ...lastFive.map(tag => ({ name: tag, value: tag })),
+      ...lastFive.map(tag => ({ 
+        name: tag.display, 
+        value: tag.display 
+      })),
       new this.#inquirer.Separator(`${this.#GRAY}------------------------${this.#NC}`),
     ];
 
     const { tag } = await this.#inquirer.prompt([{
       type: 'list',
       name: 'tag',
-      message: '●●●● Selecione a tag:',
+      message: `●●●● Selecione a tag para ${this.#YELLOW}${envKey}${this.#NC}:`,
       choices
     }]);
+    
     if (tag === 'cancelar') {
       this.log(`${this.#RED}✖ ${this.#NC}●●●● ${this.#RED}Deploy cancelado pelo usuário${this.#NC}`, false, false, false);
       await this.removeTempDir(tmpDir);
       process.exit(0);
     }
+    
     if (tag === 'nova-tag-personalizada') {
       const { custom } = await this.#inquirer.prompt([{
         type: 'input',
@@ -291,9 +307,10 @@ class Service {
         message: `Digite a nova tag (formato n.n), recomendada ${defaultTag}:`,
         validate: i => /^\d+\.\d+$/.test(i) ? true : 'Formato inválido'
       }]);
-      return custom;
+      return { display: custom, full: `${custom}${envSuffix}` };
     }
-    return tag;
+    
+    return { display: tag, full: `${tag}${envSuffix}` };
   }
 
   async removeTempDir(tmpDir) {
@@ -344,29 +361,35 @@ class Service {
       });
 
       const tag = await this.selectTag(tmp);
-
-      await this.withSpinner(`🗑️  ${this.#YELLOW}●${this.#NC} Excluindo tag anterior ${this.#LIGHT_BLUE}${tag}${this.#NC}`, async () => {
-        try {
-          await this.run(`git rev-parse -q --verify refs/tags/${tag}`, { cwd: tmp });
-          await this.run(`git tag -d ${tag}`, { cwd: tmp });
-          await this.run(`git push origin :refs/tags/${tag}`, { cwd: tmp });
-        } catch {}
+    
+      await this.withSpinner(
+        `🗑️  ${this.#YELLOW}●${this.#NC} Excluindo tag anterior ${this.#LIGHT_BLUE}${tagInfo.display}${this.#NC}`, 
+        async () => {
+          try {
+            await this.run(`git rev-parse -q --verify refs/tags/${tagInfo.full}`, { cwd: tmp });
+            await this.run(`git tag -d ${tagInfo.full}`, { cwd: tmp });
+            await this.run(`git push origin :refs/tags/${tagInfo.full}`, { cwd: tmp });
+          } catch {}
       });
 
-      await this.withSpinner(`📝 ${this.#BLUE}●${this.#NC} Criando commit para a versão ${this.#LIGHT_BLUE}${tag}${this.#NC}`, async () => {
-        const lockFile = this.#path.join(tmp, '.git', 'index.lock');
-        if (this.#fs.existsSync(lockFile)) this.#fs.unlinkSync(lockFile);
-        await this.run('git add .', { cwd: tmp });
-        await this.run(`git commit --allow-empty -m "Atualizando para a versão ${tag}"`, { cwd: tmp });
-        await this.run(`git tag ${tag}`, { cwd: tmp });
+      await this.withSpinner(
+        `📝 ${this.#BLUE}●${this.#NC} Criando commit para a versão ${this.#LIGHT_BLUE}${tagInfo.display}${this.#NC}`, 
+        async () => {
+          const lockFile = this.#path.join(tmp, '.git', 'index.lock');
+          if (this.#fs.existsSync(lockFile)) this.#fs.unlinkSync(lockFile);
+          await this.run('git add .', { cwd: tmp });
+          await this.run(`git commit --allow-empty -m "Atualizando para a versão ${tagInfo.display}"`, { cwd: tmp });
+          await this.run(`git tag ${tagInfo.full}`, { cwd: tmp });
       });
 
-      await this.withSpinner(`🚀 ${this.#BLUE}●${this.#NC} Enviando branch ${this.#YELLOW}${branch}${this.#NC}`, () =>
+      await this.withSpinner(
+        `🚀 ${this.#BLUE}●${this.#NC} Enviando branch ${this.#YELLOW}${branch}${this.#NC}`, () =>
         this.run(`git push origin ${branch} --force`, { cwd: tmp })
       );
 
-      await this.withSpinner(`🚀 ${this.#BLUE}●${this.#NC} Enviando tag ${this.#LIGHT_BLUE}${tag}${this.#NC}`, () =>
-        this.run(`git push origin ${tag} --force`, { cwd: tmp })
+      await this.withSpinner(
+        `🚀 ${this.#BLUE}●${this.#NC} Enviando tag ${this.#LIGHT_BLUE}${tagInfo.display}${this.#NC}`, () =>
+        this.run(`git push origin ${tagInfo.full} --force`, { cwd: tmp })
       );
     } finally {
       await this.removeTempDir(tmp)

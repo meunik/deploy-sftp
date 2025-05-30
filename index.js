@@ -338,7 +338,8 @@ class Service {
         await this.withSpinner(
           `🔄 ${this.#YELLOW}●${this.#NC} Criando nova branch ${this.#YELLOW}${branch}${this.#NC}`, 
           async () => {
-            await this.run(`git checkout -b ${branch}`, { cwd: tmp });
+            await this.run(`git checkout --orphan ${branch}`, { cwd: tmp });
+            await this.run('git rm -rf .', { cwd: tmp });
             await this.run(`git config --add branch.${branch}.remote origin`, { cwd: tmp });
             await this.run(`git config --add branch.${branch}.merge refs/heads/${branch}`, { cwd: tmp });
           }

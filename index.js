@@ -289,9 +289,26 @@ class Service {
     const { branch } = this.#CONFIG[envKey];
     const tmp = this.#fs.mkdtempSync(this.#path.join(this.#os.tmpdir(), `deploy-${branch}-`));
     try {
-      await this.withSpinner(`📥 ${this.#BLUE}●${this.#NC} Clonando branch ${this.#YELLOW}${branch}${this.#NC}`, () => 
-        this.run(`git clone --branch ${branch} ${this.#CLONE_URL} ${tmp}`)
-      );
+      try {
+        await this.withSpinner(
+          `📥 ${this.#BLUE}●${this.#NC} Clonando branch ${this.#YELLOW}${branch}${this.#NC}`, 
+          () => this.run(`git clone --branch ${branch} ${this.#CLONE_URL} ${tmp}`)
+        );
+      } catch (error) {
+        await this.withSpinner(
+          `📥 ${this.#RED}●${this.#NC} Branch não encontrada, clonando repositório`, 
+          () => this.run(`git clone ${this.#CLONE_URL} ${tmp}`)
+        );
+        
+        await this.withSpinner(
+          `🔄 ${this.#YELLOW}●${this.#NC} Criando nova branch ${this.#YELLOW}${branch}${this.#NC}`, 
+          async () => {
+            await this.run(`git checkout -b ${branch}`, { cwd: tmp });
+            await this.run(`git config --add branch.${branch}.remote origin`, { cwd: tmp });
+            await this.run(`git config --add branch.${branch}.merge refs/heads/${branch}`, { cwd: tmp });
+          }
+        );
+      }
 
       await this.withSpinner(`🧹 ${this.#YELLOW}●${this.#NC} Removendo arquivos exceto .git`, () => {
         this.#fs.readdirSync(tmp).forEach(item => {

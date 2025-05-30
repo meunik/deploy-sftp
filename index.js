@@ -265,13 +265,12 @@ class Service {
     }
     
     const choices = [
-      defaultTag,
-      new this.#inquirer.Separator(),
-      'nova-tag-personalizada',
-      'cancelar',
-      new this.#inquirer.Separator(),
-      ...lastFive,
-      new this.#inquirer.Separator(),
+      { name: `${this.#LIGHT_BLUE}${defaultTag}${this.#NC}`, value: defaultTag },
+      { name: `nova-tag-personalizada`, value: 'nova-tag-personalizada' },
+      { name: `${this.#RED}cancelar${this.#NC}`, value: 'cancelar' },
+      new this.#inquirer.Separator(`${this.#GRAY}----- Últimas tags -----${this.#NC}`),
+      ...lastFive.map(tag => ({ name: tag, value: tag })),
+      new this.#inquirer.Separator(`${this.#GRAY}------------------------${this.#NC}`),
     ];
 
     const { tag } = await this.#inquirer.prompt([{
@@ -280,7 +279,11 @@ class Service {
       message: '●●●● Selecione a tag:',
       choices
     }]);
-    if (tag === 'cancelar') process.exit(0);
+    if (tag === 'cancelar') {
+      this.log(`\n${this.#RED}✖ ${this.#NC}●●●● ${this.#RED}Deploy cancelado pelo usuário${this.#NC}`, false, false, false);
+      await this.removeTempDir(tmpDir);
+      process.exit(0);
+    }
     if (tag === 'nova-tag-personalizada') {
       const { custom } = await this.#inquirer.prompt([{
         type: 'input',
@@ -291,6 +294,13 @@ class Service {
       return custom;
     }
     return tag;
+  }
+
+  async removeTempDir(tmpDir) {
+    await this.withSpinner(`🧹 ${this.#GREEN}●${this.#NC} Removendo diretório temporário`, async () => {
+      await new Promise(r => setTimeout(r, 100));
+      this.#fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
   }
 
   async gitFlow(envKey) {
@@ -359,10 +369,7 @@ class Service {
         this.run(`git push origin ${tag} --force`, { cwd: tmp })
       );
     } finally {
-      await this.withSpinner(`🧹 ${this.#GREEN}●${this.#NC} Removendo diretório temporário`, async () => {
-        await new Promise(r => setTimeout(r, 100));
-        this.#fs.rmSync(tmp, { recursive: true, force: true });
-      });
+      await this.removeTempDir(tmp)
     }
   }
 

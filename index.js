@@ -264,7 +264,15 @@ class Service {
       defaultTag = `${m}.${isNaN(s) ? 1 : s + 1}`;
     }
     
-    const choices = [...lastFive, 'nova-tag-personalizada', defaultTag, new this.#inquirer.Separator(), 'cancelar'].reverse();
+    const choices = [
+      defaultTag,
+      new this.#inquirer.Separator(),
+      'nova-tag-personalizada',
+      'cancelar',
+      new this.#inquirer.Separator(),
+      ...lastFive,
+      new this.#inquirer.Separator(),
+    ];
 
     const { tag } = await this.#inquirer.prompt([{
       type: 'list',
